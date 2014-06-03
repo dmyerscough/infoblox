@@ -6,7 +6,7 @@ import json
 
 class Infoblox():
 
-    def __init__(self, hostname, username, password, version=1.2.1):
+    def __init__(self, hostname, username, password, version='1.2.1'):
         '''
 
         '''
@@ -52,10 +52,8 @@ class Infoblox():
                 return True
             else:
                 return res.json()
-        elif res.status_code == 400:
+        else:
             raise Exception(json.loads(res.content)['text'])
-
-        return None
 
     def get_network(self, network):
         '''
@@ -65,22 +63,71 @@ class Infoblox():
         >>> app.get_network('10.224.253.0/28')
         [{u'comment': u'Damian Test', u'_ref':
           u'network/ZG5zLm5ldHdvcmskMTAuMjI0LjI1My4wLzI4LzA:10.224.253.0/28/default',
-          u'network':
-          u'10.224.253.0/28',
-          u'network_view':
-          u'default'}]
+          u'network': u'10.224.253.0/28',
+          u'network_view': u'default'}]
         '''
         return self._request('network', {'network': network}, 'GET')
 
-    def create_network(self, network):
+    def create_network(self, network, grid=False, options={}):
         '''
         Create a network
 
         >>> app = Infoblox('https://example.com', 'admin', 'secret')
         >>> app.get_network('10.224.254.0/28')
         True
+
+        Create a network and assign the network to a graid master (10.1.1.1)
+
+        >>> app = Infoblox('https://example.com', 'admin', 'secret')
+        >>> app.get_network('10.224.254.0/28', '10.1.1.1')
+        True
+
+        Create a network and override default routers value
+
+        >>> app = Infoblox('https://example.com', 'admin', 'secret')
+        >>> app.get_network('10.224.254.0/28', '10.1.1.1', {'name': 'routers',
+        ...                                                'value': 'x.x.x.x'})
+        True
+
+        Supported Options
+        =================
+
+        * Modify Routers option
+        {'name': 'routers', 'value': '10.224.254.1'}
+
+        * Modify dhcp-lease-time
+        {'name': 'dhcp-lease-time', 'value': '6000'}
+
+        * Modify domain name
+        {'name': 'domain-name', 'value': 'ictest.local'}
+
+        * Modify NTP servers
+        {'name': 'ntp-servers', 'value': 'x.x.x.x'}
         '''
-        return self._request('network', {'network': network}, 'POST')
+        if options and isinstance(options, dict):
+            opts = {'use_option': True, 'vendor_class': 'DHCP'}
+            opts.update(options)
+
+        if grid:
+            if options:
+                data = {'network': network,
+                        'options': [options],
+                        'members': [{'_struct': 'dhcpmember',
+                                     'ipv4addr': grid}]}
+            else:
+                data = {'network': network,
+                        'members': [{'_struct': 'dhcpmember',
+                                     'ipv4addr': grid}]}
+
+            return self._request('network', data, 'POST')
+        else:
+            if options:
+                data = {'network': network,
+                        'options': [options]}
+            else:
+                data = {'network': network}
+
+            return self._request('network', data, 'POST')
 
     def get_host_record(self, hostname):
         '''
@@ -122,10 +169,19 @@ class Infoblox():
             raise Exception('Unable to retrieve next available IP \
                             address for {0}'.format(network))
 
+    def network_range(self, network, start, end):
+        '''
+        Reserve DHCP IP range for a specific network
+        '''
+        return self._request('range', {'start_addr': start,
+                                       'end_addr': end,
+                                       'network': network}, 'POST')
 
 if __name__ == '__main__':
 
-    #app = Infoblox('https://example.com', 'admin', 'secret', '1.2.1')
-    #print app.create_fixed_address('myhost.example.com', '10.224.253.1', '90:b1:1c:71:86:e6')
+    app = Infoblox('https://example.com', 'admin', 'secret', '1.2.1')
+    #print app.create_fixed_address('example.com', '10.224.253.1', '90:b1:1c:71:86:e6')
     #print app.get_next_ip('10.224.253.0/28', 2)
-    #print app.create_network('10.224.254.0/28')
+    #print app.create_network('10.224.254.0/28', '10.224.43.36', {'name': 'routers', 'value': '10.224.254.1'})
+    #print app.create_network('10.224.254.0/28', '10.224.43.36', {'name': 'routers', 'value': '10.224.254.1'})
+    #print app.network_range('10.224.254.0/28', '10.224.254.4', '10.224.254.14', '10.224.254.1')
