@@ -59,12 +59,21 @@ class Infoblox():
                 verify=False,
                 auth=(self.username, self.password)
             )
+        elif method.upper() == 'PUT':
+            res = self.session.put(
+                self.url + obj,
+                data=json.dumps(req),
+                verify=False,
+                auth=(self.username, self.password)
+            )
 
         if res.status_code == 200 or res.status_code == 201:
             if res.content.replace('"', '').startswith(obj):
                 return True
             else:
                 return res.json()
+        elif res.status_code == 401:
+            raise Exception('Unable to login to Infoblox')
         else:
             raise Exception(json.loads(res.content)['text'])
 
@@ -79,7 +88,7 @@ class Infoblox():
         The DNS record type
 
         >>> app = Infoblox('https://example.com', 'admin', 'secret')
-        >>> app.delete_record('example.rollback.sfdc.net', 'host')
+        >>> app.delete_record('example.example.com', 'host')
         True
         '''
         ref = self.get_record(record, record_type)
@@ -99,7 +108,7 @@ class Infoblox():
         >>> app = Infoblox('https://example.com', 'admin', 'secret')
         >>> app.get_network('10.224.253.0/28')
         [{u'comment': u'Damian Test', u'_ref':
-          u'network/ZG5zLm5ldHdvcmskMTAuMjI0LjI1My4wLzI4LzA:10.224.253.0/28/default',
+          u'network/ZG5zLm5ldHdvcmskMTAuI1My4wLzI4LzA:10.224.253.0/28/default',
           u'network': u'10.224.253.0/28',
           u'network_view': u'default'}]
         '''
@@ -165,8 +174,6 @@ class Infoblox():
                 data = {'network': network,
                         'members': [{'_struct': 'dhcpmember',
                                      'ipv4addr': grid}]}
-
-            return self._request('network', data, 'POST')
         else:
             if options:
                 data = {'network': network,
@@ -174,7 +181,7 @@ class Infoblox():
             else:
                 data = {'network': network}
 
-            return self._request('network', data, 'POST')
+        return self._request('network', data, 'POST')
 
     def get_record(self, record, record_type):
         '''
@@ -188,16 +195,17 @@ class Infoblox():
 
         >>> app = Infoblox('https://example.com', 'admin', 'secret')
         >>> app.get_record('myhost.example.com', 'host')
-        [{u'_ref': u'record:host/ZG5zLmhvc3QkLl9kZWZhdWx0Lm5ldC5zZmRjLnJvbGxiYWNrLmV4YW1wbGU:myhost.example.com/default',
+        [{u'_ref': u'record:host/ZG5zLmhGxiW1wbGU:myhost.example.com/default',
           u'name': u'myhost.example.com',
           u'ipv4addrs': [{u'configure_for_dhcp': False,
-                          u'_ref': u'record:host_ipv4addr/ZG5zLmhvc3RfYWRkcmVzcyQuX2RlZmF1bHQubmV0LnNmZGMucm9sbGJhY2suZXhhbXBsZS4xMC4wLjAuMS4:10.0.0.1/myhost.example.com/default',
+                          u'_ref': u'record:host_ipv4addr/ZG5zLS4:10.0.0.1/myhost.example.com/default',
                           u'ipv4addr': u'10.0.0.1',
                           u'host': u'myhost.example.com'}],
          u'view': u'default'}]
         '''
         if record_type in self._RECORDS:
-            return self._request('record:' + record_type, {'name': record}, 'GET')
+            return self._request('record:' + record_type,
+                                 {'name': record}, 'GET')
         else:
             raise Exception('unsupported record type {0}'.format(record_type))
 
@@ -230,13 +238,19 @@ class Infoblox():
         if isinstance(data, dict):
             _options.update({'MX': {'name': record,
                            'mail_exchanger': data['mail_exchanger'],
-                           'preference': data['preference']})
+                           'preference': data['preference']}})
 
         if record_type in self._RECORDS:
             return self._request('record:' + record_type.lower(),
                                  _options[record_type.upper()], 'POST')
         else:
             raise Exception('unsupported record type {0}'.format(record_type))
+
+    def create_zone(self, zone):
+        '''
+
+        '''
+        self._request('zone_auth', {'fqdn':  zone}, 'POST')
 
     def create_fixed_address(self, hostname, ip, mac, comment=''):
         '''
@@ -255,7 +269,7 @@ class Infoblox():
         Comments to be associated with the static address
 
         >>> app = Infoblox('https://example.com', 'admin', 'secret')
-        >>> app.create_fixed_address('ops-test1-1-sfm.rollback.sfdc.net',
+        >>> app.create_fixed_address('ops-test1-1-sfm.example.com',
             '10.224.253.1', '90:b1:1c:71:86:e6'
         )
         True
@@ -298,7 +312,8 @@ class Infoblox():
         The end IP address to be reserved
 
         >>> app = Infoblox('https://example.com', 'admin', 'secret')
-        >>> app.network_range('10.224.254.0/28', '10.224.254.4', '10.224.254.14')
+        >>> app.network_range('10.224.254.0/28', '10.224.254.4',
+                              '10.224.254.14')
         True
         '''
         return self._request('range', {'start_addr': start,
@@ -319,17 +334,19 @@ class Infoblox():
 
 if __name__ == '__main__':
 
-    app = Infoblox('https://example.com', 'admin', 'secret')
-    #print app.create_fixed_address('example.com', '10.224.253.1', '90:b1:1c:71:86:e6')
+    app = Infoblox('https://example.com', 'admin', 'secret', '1.2.1')
+    print app.create_fixed_address('myhost.example.com', '10.224.253.14', '00:50:56:BA:CD:B8')
     #print app.get_next_ip('10.224.253.0/28', 2)
     #print app.create_network('10.224.254.0/28', '10.224.43.36', {'name': 'routers', 'value': '10.224.254.1'})
     #print app.create_network('10.224.254.0/28', '10.224.43.36', {'name': 'routers', 'value': '10.224.254.1'})
     #print app.network_range('10.224.254.0/28', '10.224.254.4', '10.224.254.14', '10.224.254.1')
     #print app.get_record('myhost.example.com', 'host')
-    #print app.delete_record('myhost.example.com', 'host')
-    #print app.create_record('A', 'myhost.example.com', '10.0.0.1')
-    #print app.create_record('CNAME', 'myhost1.example.com', 'myhost.example.com')
-    #print app.create_record('PTR', 'myhost.example.com', '10.0.0.1')
-    #print app.create_record('TXT', 'myhost.example.com', 'THIS IS A TEST')
-    #print app.create_record('HOST', 'myhost.example.com', '10.0.0.3')
-    #print app.create_record('MX', 'myhost.example.com', {'mail_exchanger': '10.0.0.1', 'preference': 20})
+    #print app.delete_record('example.example.com', 'host')
+    #print app.create_record('A', 'example.example.com', '10.0.0.1')
+    #print app.create_record('CNAME', 'example2.example.com', 'example.example.com')
+    #print app.create_record('PTR', 'example.example.com', '10.0.0.1')
+    #print app.create_record('TXT', 'example.example.com', 'THIS IS A TEST')
+    #print app.create_record('HOST', 'example3.example.com', '10.0.0.3')
+    #print app.create_record('MX', 'example3.example.com', {'mail_exchanger': '10.0.0.1', 'preference': 20})
+    #print app.get_grid()
+    #print app.create_zone('ops.sfdc.net')
