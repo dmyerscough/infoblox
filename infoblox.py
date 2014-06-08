@@ -88,7 +88,7 @@ class Infoblox():
         The DNS record type
 
         >>> app = Infoblox('https://example.com', 'admin', 'secret')
-        >>> app.delete_record('example.example.com', 'host')
+        >>> app.delete_record('example.rollback.sfdc.net', 'host')
         True
         '''
         ref = self.get_record(record, record_type)
@@ -269,7 +269,7 @@ class Infoblox():
         Comments to be associated with the static address
 
         >>> app = Infoblox('https://example.com', 'admin', 'secret')
-        >>> app.create_fixed_address('ops-test1-1-sfm.example.com',
+        >>> app.create_fixed_address('ops-test1-1-sfm.rollback.sfdc.net',
             '10.224.253.1', '90:b1:1c:71:86:e6'
         )
         True
@@ -277,6 +277,8 @@ class Infoblox():
         return self._request('fixedaddress', {'name': hostname,
                                               'ipv4addr': ip,
                                               'mac': mac,
+                                              'options': [{'name': 'host-name',
+                                                           'value': hostname}],
                                               'comment': comment}, 'POST')
 
     def get_next_ip(self, network, n=1):
